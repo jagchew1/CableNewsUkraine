@@ -1,0 +1,901 @@
+library(data.table)
+library(quanteda)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(readxl)
+library(dplyr)
+library(stringr)
+library(forcats)
+library(ggplot2)
+library(stm)
+library(readtext)
+library(texreg)
+library(devtools)
+library(tidystm)
+library(grid)
+
+foxnewstranscripts_1_ <- read_excel("~/Homeschool/Mitchell Year/Summer Thesis Ideas/qta final project/foxnewstranscripts (3).xlsx")
+andersoncooper <- read_excel("~/Homeschool/Mitchell Year/Summer Thesis Ideas/qta final project/andersoncooper.xlsx")
+donlemon <- read_excel("~/Homeschool/Mitchell Year/Summer Thesis Ideas/qta final project/donlemon.xlsx")
+jaketapper <- read_excel("~/Homeschool/Mitchell Year/Summer Thesis Ideas/qta final project/jaketapper.xlsx")
+wolfblitzer <- read_excel("~/Homeschool/Mitchell Year/Summer Thesis Ideas/qta final project/wolfblitzer.xlsx")
+
+andersoncooper$host <- "Anderson Cooper"
+donlemon$host <- "Don Lemon"
+jaketapper$host <- "Jake Tapper"
+wolfblitzer$host <- "Wolf Blitzer"
+
+foxnewstranscripts_1_$date_and_time <- foxnewstranscripts_1_$date
+
+foxnewstranscripts_1_$date <- format(as.Date(foxnewstranscripts_1_$date_and_time,
+                                             "%B %d, %Y"))
+
+foxnewstranscripts_1_$date_and_time
+
+andersoncooper$date_and_time <- andersoncooper$date
+donlemon$date_and_time <- donlemon$date
+jaketapper$date_and_time <- jaketapper$date
+wolfblitzer$date_and_time <- wolfblitzer$date
+
+andersoncooper$date <- sub("Aired ", "", andersoncooper$date)
+donlemon$date <- sub("Aired ", "", donlemon$date)
+jaketapper$date <- sub("Aired ", "", jaketapper$date)
+wolfblitzer$date <- sub("Aired ", "", wolfblitzer$date)
+
+andersoncooper$date <- format(as.Date(andersoncooper$date, "%B %d, %Y"))
+donlemon$date <- format(as.Date(donlemon$date, "%B %d, %Y"))
+jaketapper$date <- format(as.Date(jaketapper$date, "%B %d, %Y"))
+wolfblitzer$date <- format(as.Date(wolfblitzer$date, "%B %d, %Y"))
+
+andersoncooper$network <- "CNN"
+donlemon$network <- "CNN"
+jaketapper$network <- "CNN"
+wolfblitzer$network <- "CNN"
+
+foxnewstranscripts_1_$host <- rep("Not listed", nrow(foxnewstranscripts_1_))
+foxnewstranscripts_1_$network <- "Fox"
+
+foxnewstranscripts_1_$host[foxnewstranscripts_1_$title %like% "*Tucker*"] <- "Tucker Carlson"
+foxnewstranscripts_1_$host[foxnewstranscripts_1_$title %like% "*Ingraham*"] <- "Laura Ingraham"
+foxnewstranscripts_1_$host[foxnewstranscripts_1_$title %like% "*Hannity*"] <- "Sean Hannity"
+foxnewstranscripts_1_$host[foxnewstranscripts_1_$title %like% "*Gutfeld*"] <- "Greg Gutfeld"
+foxnewstranscripts_1_$host[foxnewstranscripts_1_$title %like% "*The Five*"] <- "The Five"
+foxnewstranscripts_1_$host[foxnewstranscripts_1_$host == "Not listed"] <- "Other"
+
+andersoncooper <- andersoncooper %>%
+  select(c('title', 'date', 'monologue', 'host', 'date_and_time', 'network'))
+
+donlemon <- donlemon %>%
+  select(c('title', 'date', 'monologue', 'host', 'date_and_time', 'network'))
+
+jaketapper <- jaketapper %>%
+  select(c('title', 'date', 'monologue', 'host', 'date_and_time', 'network'))
+
+wolfblitzer <- wolfblitzer %>%
+  select(c('title', 'date', 'monologue', 'host', 'date_and_time', 'network'))
+
+foxnewstranscripts_1_ <- foxnewstranscripts_1_ %>%
+  select(c('title', 'date', 'monologue', 'host', 'date_and_time', 'network'))
+
+
+#summary(foxnewstranscripts_1_)
+#summary(andersoncooper)
+
+monologues <- merge(andersoncooper, donlemon, by=c("title", "date", "monologue", "host", "date_and_time", "network"), all.x = TRUE, all.y = TRUE)
+monologues <- merge(monologues, jaketapper, by=c("title", "date", "monologue", "host", "date_and_time", "network"), all.x = TRUE, all.y = TRUE)
+monologues <- merge(monologues, wolfblitzer, by=c("title", "date", "monologue", "host", "date_and_time", "network"), all.x = TRUE, all.y = TRUE)
+monologues <- merge(monologues, foxnewstranscripts_1_, by=c("title", "date", "monologue", "host", "date_and_time", "network"), all.x = TRUE, all.y = TRUE)
+
+monologues <- filter(monologues, monologues$date > as.Date("02/24/22", "%m/%d/%y"))
+monologues <- filter(monologues, monologues$date < as.Date("04/01/22", "%m/%d/%y"))
+
+monologues <- filter(monologues, !monologues$monologue %like% "Did Not Air.")
+
+monologues$host[monologues$host == "Not listed"] <- "Other"
+
+#tokens
+cableTV_tokens <- c("fox", "ingraham", "carlson", "cavuto",
+                    "hannity", "gutfeld", "pirro", "watters", "yingst",
+                    "neil", "sean", "greg", "baier", "clip", "tucker",
+                    "perino", "cnn", "lemon", "cooper", "blitzer",
+                    "tapper", "wolf", "voice-over", "cnn's", "anderson",
+                    "videotape", "breaking", "jake", "clarissa", "watson",
+                    "don", "commercial", "break", "kiley", "marquez",
+                    "pleitgen", "ward", "Palkot", "Benjamin", "Hemmer",
+                    "rivera", "tomlinson", "laura", "lucas", "Trey",
+                    "camera", "walsh", "sciutto", "collins", "beyondwords",
+                    "transcript", "copy", "news", "international",
+                    "1x", "article", "jesse", "bret", "video", "copyright",
+                    "fox's", "jennifer", "leighton", "ph", "kaitlan",
+                    "paton", "sam", "kiley", "voice", "over", "doocy",
+                    "angle", "articles", "final", "liebermann", "salazar",
+                    "Arroyo", "Wedeman", "Raymond", "Dinesh",
+                    "Gabbard", "Tulsi", "Stein", "Toria",
+                    "Barron", "henirich", "tobin", "hugh",
+                    "jacqui", "thune", "gillian", "jansa",
+                    "griffin", "keane", "jacqui", "tobin",
+                    "mcdowell", "geraldo", "sidner", "junger",
+                    "nick", "tamarin", "murray", "timpf",
+                    "tyrus", "amanpour", "christiane", "lah",
+                    "macgregor", "tarlov", "kilmeade", "katie", "pavlich",
+                    "jessica")
+
+sentences_monologues <-
+  corpus_reshape(corpus(monologues$monologue), to = "sentences")
+
+tokens_monologues <- tokens(monologues$monologue, remove_punct = TRUE)
+
+tokens_monologues_no_stopwords <- tokens_monologues %>%
+  tokens_remove(stopwords("en")) %>%
+  tokens_remove(cableTV_tokens)
+
+tucker_monologues <- filter(monologues, host=="Tucker Carlson")
+hannity_monologues <- filter(monologues, host=="Sean Hannity")
+ingraham_monologues <- filter(monologues, host=="Laura Ingraham")
+thefive_monologues <- filter(monologues, host=="The Five")
+anderson_monologues <- filter(monologues, host=="Anderson Cooper")
+blitzer_monologues <- filter(monologues, host=="Wolf Blitzer")
+lemon_monologues <- filter(monologues, host=="Don Lemon")
+tapper_monologues <- filter(monologues, host=="Jake Tapper")
+
+fox_monologues <- filter(monologues, network=="Fox")
+cnn_monologues <- filter(monologues, network=="CNN")
+
+not_tucker_monologues <- filter(monologues, !host=="Tucker Carlson")
+not_hannity_monologues <- filter(monologues, !host=="Sean Hannity")
+not_ingraham_monologues <- filter(monologues, !host=="Laura Ingraham")
+not_thefive_monologues <- filter(monologues, !host=="The Five")
+
+fox_not_tucker_monologues <- filter(fox_monologues, !host=="Tucker Carlson")
+fox_not_hannity_monologues <- filter(fox_monologues, !host=="Sean Hannity")
+fox_not_ingraham_monologues <- filter(fox_monologues, !host=="Laura Ingraham")
+fox_not_thefive_monologues <- filter(fox_monologues, !host=="The Five")
+
+not_anderson_monologues <- filter(monologues, !host=="Anderson Cooper")
+not_blitzer_monologues <- filter(monologues, !host=="Wolf Blitzer")
+not_lemon_monologues <- filter(monologues, !host=="Don Lemon")
+not_tapper_monologues <- filter(monologues, !host=="Jake Tapper")
+
+cnn_not_anderson_monologues <- filter(cnn_monologues, !host=="Anderson Cooper")
+cnn_not_blitzer_monologues <- filter(cnn_monologues, !host=="Wolf Blitzer")
+cnn_not_lemon_monologues <- filter(cnn_monologues, !host=="Don Lemon")
+cnn_not_tapper_monologues <- filter(cnn_monologues, !host=="Jake Tapper")
+
+summary(monologues)
+
+ggplot(monologues) +
+  geom_bar(aes(x = date, fill = network, stat = "count")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  scale_fill_brewer(palette = "Dark2") +
+  xlab("Date") +
+  ylab("Number of Monologues") +
+  labs(fill = "Network")# +
+  #ggtitle("Number of Monologues in Data Set by Network and Date")
+
+ggplot(monologues) +
+  geom_bar(aes(x = fct_infreq(host), stat = "count", fill = network)) +
+  scale_fill_brewer(palette = "Dark2") +
+  coord_flip() +
+  xlab("Network Host") +
+  ylab("Number of Monologues") +
+  labs(fill = "Network") +
+  ggtitle("Number of Monologues in Data Set by Host")
+
+monologues %>%
+  group_by(network, host) %>%
+  count()
+
+#tokens for each individual host
+
+tucker_tokens_no_stopwords <- tokens(tucker_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en")) %>%
+  tokens_remove(cableTV_tokens)
+
+tokens_select(tucker_tokens_no_stopwords, "^[:upper:]+$", selection = "keep")
+str_detect(tucker_tokens_no_stopwords, "^[:upper:]+$")
+
+hannity_tokens_no_stopwords <- tokens(hannity_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+ingraham_tokens_no_stopwords <- tokens(ingraham_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+thefive_tokens_no_stopwords <- tokens(thefive_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+anderson_tokens_no_stopwords <- tokens(anderson_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+blitzer_tokens_no_stopwords <- tokens(blitzer_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+lemon_tokens_no_stopwords <- tokens(lemon_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+tapper_tokens_no_stopwords <- tokens(tapper_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+#tokens without each individual host
+
+no_tucker_tokens_no_stopwords <- tokens(not_tucker_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+no_hannity_tokens_no_stopwords <- tokens(not_hannity_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+no_ingraham_tokens_no_stopwords <- tokens(not_ingraham_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+no_thefive_tokens_no_stopwords <- tokens(not_thefive_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+no_anderson_tokens_no_stopwords <- tokens(not_anderson_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+no_blitzer_tokens_no_stopwords <- tokens(not_blitzer_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+no_lemon_tokens_no_stopwords <- tokens(not_lemon_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en")) %>%
+  tokens_remove(cableTV_tokens)
+
+no_tapper_tokens_no_stopwords <- tokens(not_tapper_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+#Fox & CNN tokens
+
+fox_tokens_no_stopwords <- tokens(fox_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+cnn_tokens_no_stopwords <- tokens(cnn_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+#Fox & CNN tokens without individual hosts
+no_tucker_fox_tokens <- tokens(fox_not_tucker_monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en"))  %>%
+  tokens_remove(cableTV_tokens)
+
+dfmat_ukraine$network <- monologues$network
+
+tokens_monologues_no_stopwords$date <- monologues$date
+tokens_monologues_no_stopwords$host <- monologues$host
+tokens_monologues_no_stopwords$network <- monologues$network
+
+dfmat_monologues_no_stopwords <- dfm(tokens_monologues_no_stopwords)
+
+dfmat_monologues_no_stopwords$network <- monologues$network
+
+#Lexical dispersion plot
+kwic(tokens_monologues_no_stopwords, pattern = "ukrain*") %>%
+  textplot_xray()
+
+#frequency weights
+
+#general
+freq_weight <- textstat_frequency(dfmat_monologues_no_stopwords, n = 20,
+                                  groups = dfmat_monologues_no_stopwords$network)
+
+freq_weight
+
+ggplot(data = freq_weight, aes(x = nrow(freq_weight):1, y = frequency)) +
+  geom_point() +
+  facet_wrap(~ group, scales = "free") +
+  coord_flip() +
+  scale_x_continuous(breaks = nrow(freq_weight):1,
+                     labels = freq_weight$feature) +
+  labs(x = NULL, y = "Relative frequency")
+
+freq_weight$ukraine_feature <- ifelse(as.character(freq_weight$feature) %in%
+                                        c("ukraine", "zelensky",
+                                                    "kyiv", "zelenskyy",
+                                          "ukrainian"), 1, 0)
+
+freq_weight$network <- ifelse(freq_weight$group %in% c("Greg Gutfeld",
+                                                       "Laura Ingraham",
+                                                       "Sean Hannity",
+                                                       "Other",
+                                                       "The Five",
+                                                       "Tucker Carlson"), "Fox",
+                              "CNN")
+
+freq_weight$ukraine_feature <- 0
+freq_weight$ukraine_feature[freq_weight$feature %in% c("ukrain*", "zelensky*",
+                                                       "kyiv", "russia*",
+                                                       "zelensky*")] <- 1
+
+
+#Ukraine words specific
+ukraine_toks <- tokens_keep(tokens_monologues_no_stopwords, pattern = "Ukrain*", window = 20)
+ukraine_toks <- tokens_remove(ukraine_toks, pattern = "Ukrain*")
+not_ukraine_toks <- tokens_remove(tokens_monologues_no_stopwords, pattern = "Ukrain*", window = 20)
+
+dfmat_ukraine <- dfm(ukraine_toks)
+dfmat_not_ukraine <- dfm(not_ukraine_toks)
+
+dfmat_ukraine$network <- monologues$network
+
+freq_weight_ukraine <- textstat_frequency(dfmat_ukraine, n = 20,
+                                  groups = dfmat_ukraine$network)
+
+ggplot(data = freq_weight_ukraine, aes(x = nrow(freq_weight_ukraine):1, y = frequency)) +
+  geom_point() +
+  facet_wrap(~ group, scales = "free") +
+  coord_flip() +
+  scale_x_continuous(breaks = nrow(freq_weight_ukraine):1,
+                     labels = freq_weight_ukraine$feature) +
+  labs(x = NULL, y = "Relative frequency")
+
+#Zelensky words specific
+zelensky_toks <- tokens_keep(tokens_monologues_no_stopwords, pattern = "Zelensky*", window = 20)
+zelensky_toks <- tokens_remove(ukraine_toks, pattern = "Zelensky*")
+dfmat_zelensky <- dfm(zelensky_toks)
+dfmat_zelensky$network <- monologues$network
+
+freq_weight_zelensky <- textstat_frequency(dfmat_zelensky, n = 20,
+                                          groups = dfmat_zelensky$network)
+
+ggplot(data = freq_weight_zelensky, aes(x = nrow(freq_weight_zelensky):1, y = frequency)) +
+  geom_point() +
+  facet_wrap(~ group, scales = "free") +
+  coord_flip() +
+  scale_x_continuous(breaks = nrow(freq_weight_zelensky):1,
+                     labels = freq_weight_zelensky$feature) +
+  labs(x = NULL, y = "Relative frequency")
+
+#KEYNESS ANALYSIS
+
+#Overall fox vs cnn
+dfmat_fox_tokens <- dfmat(fox_tokens_no_stopwords)
+dfmat_cnn_tokens <- dfmat(cnn_tokens_no_stopwords)
+
+tstat_key_fox_vs_cnn <- textstat_keyness(rbind(dfm(fox_tokens_no_stopwords), dfm(cnn_tokens_no_stopwords)),
+                                            target = seq_len(ndoc(dfm(fox_tokens_no_stopwords))))
+textplot_keyness(tstat_key_fox_vs_cnn)
+head(tstat_key_fox_vs_cnn, 30)
+
+#UKRAINE
+
+tstat_key_ukraine_toks <- textstat_keyness(rbind(dfmat_ukraine, dfmat_not_ukraine),
+                                     target = seq_len(ndoc(dfmat_ukraine)))
+head(tstat_key_ukraine_toks, 50)
+textplot_keyness(tstat_key_ukraine_toks, n = 30L)
+
+ukraine_bigrams <- tokens_ngrams(ukraine_toks, n=2)
+dfmat_ukraine_bigrams <- dfm(ukraine_bigrams)
+
+
+#ZELENSKY
+
+zelensky_toks <- tokens_keep(tokens_monologues_no_stopwords, pattern = "Zelensky*", window = 20)
+zelensky_toks <- tokens_remove(zelensky_toks, pattern = c("Volodymyr", "President", "Zelensky*"))
+not_zelensky_toks <- tokens_remove(tokens_monologues_no_stopwords, pattern = "Zelensky*", window = 20)
+
+dfmat_zelensky <- dfm(zelensky_toks)
+dfmat_not_zelensky <- dfm(not_zelensky_toks)
+
+tstat_key_zelensky_toks <- textstat_keyness(rbind(dfmat_zelensky, dfmat_not_zelensky),
+                                           target = seq_len(ndoc(dfmat_zelensky)))
+head(tstat_key_zelensky_toks, 50)
+textplot_keyness(tstat_key_zelensky_toks)
+
+zelensky_bigrams <- tokens_ngrams(zelensky_toks, n=2)
+dfmat_zelensky_bigrams <- dfm(zelensky_bigrams)
+head(textstat_frequency(dfmat_zelensky_bigrams, n = 50), 50)
+
+filter(monologues, monologues$monologue %like% "*NATO Supreme Allied Commander")
+
+#FOX vs CNN
+#Ukraine
+ukraine_toks_fox <- tokens_keep(fox_tokens_no_stopwords, pattern = "Ukrain*", window = 20)
+
+ukraine_toks_cnn <- tokens_keep(cnn_tokens_no_stopwords, pattern = "Ukrain*", window = 20)
+
+dfmat_ukraine_fox <- dfm(ukraine_toks_fox)
+dfmat_ukraine_cnn <- dfm(ukraine_toks_cnn)
+
+tstat_key_ukraine_toks_fox_vs_cnn <- textstat_keyness(rbind(dfmat_ukraine_fox, dfmat_ukraine_cnn),
+                                           target = seq_len(ndoc(dfmat_ukraine_fox)))
+head(tstat_key_ukraine_toks_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_ukraine_toks_fox_vs_cnn)
+
+ukraine_bigrams <- tokens_ngrams(ukraine_toks, n=2)
+dfmat_ukraine_bigrams <- dfm(ukraine_bigrams)
+head(textstat_frequency(dfmat_ukraine_bigrams, n = 50), 50)
+textplot_keyness()
+
+ukraine_bigrams_fox <- tokens_ngrams(ukraine_toks_fox, n = 2)
+ukraine_bigrams_cnn <- tokens_ngrams(ukraine_toks_cnn, n = 2)
+
+dfmat_ukraine_bigrams_fox <- dfm(ukraine_bigrams_fox)
+dfmat_ukraine_bigrams_cnn <- dfm(ukraine_bigrams_cnn)
+
+tstat_key_ukraine_bigrams_fox_vs_cnn <- textstat_keyness(rbind(dfmat_ukraine_bigrams_fox, dfmat_ukraine_bigrams_cnn),
+                                                      target = seq_len(ndoc(dfmat_ukraine_bigrams_fox)))
+
+head(tstat_key_ukraine_bigrams_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_ukraine_bigrams_fox_vs_cnn)
+
+#NATO
+
+nato_toks_fox <- tokens_keep(fox_tokens_no_stopwords, pattern = "NATO", window = 20)
+
+nato_toks_cnn <- tokens_keep(cnn_tokens_no_stopwords, pattern = "NATO", window = 20)
+
+dfmat_nato_fox <- dfm(nato_toks_fox)
+dfmat_nato_cnn <- dfm(nato_toks_cnn)
+
+tstat_key_nato_toks_fox_vs_cnn <- textstat_keyness(rbind(dfmat_nato_fox, dfmat_nato_cnn),
+                                                      target = seq_len(ndoc(dfmat_nato_fox)))
+head(tstat_key_nato_toks_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_nato_toks_fox_vs_cnn)
+
+kwic(nato_bigrams_fox, "green_light", window = 20)
+
+#bigrams
+
+nato_bigrams_fox <- tokens_ngrams(nato_toks_fox, n = 2)
+nato_bigrams_cnn <- tokens_ngrams(nato_toks_cnn, n = 2)
+
+dfmat_nato_bigrams_fox <- dfm(nato_bigrams_fox)
+dfmat_nato_bigrams_cnn <- dfm(nato_bigrams_cnn)
+
+tstat_key_nato_bigrams_fox_vs_cnn <- textstat_keyness(rbind(dfmat_nato_bigrams_fox, dfmat_nato_bigrams_cnn),
+                                                      target = seq_len(ndoc(dfmat_nato_bigrams_fox)))
+
+head(tstat_key_nato_bigrams_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_nato_bigrams_fox_vs_cnn, color = c("brown", "black"))
+
+nato_toks_with_stopwords <- tokens_keep(tokens_monologues, pattern = "NATO", window = 20)
+
+kwic(nato_toks_with_stopwords, "Trump", window = 30)
+
+filter(monologues, monologues$monologue %like% "*having a large percentage of their energy needs paid*")
+
+nato_toks_with_stopwords$host <- monologues$host
+
+nato_toks_with_stopwords$host
+
+#zelensky
+
+zelensky_toks_fox <- tokens_keep(fox_tokens_no_stopwords, pattern = "zelensky", window = 20)
+
+zelensky_toks_cnn <- tokens_keep(cnn_tokens_no_stopwords, pattern = "zelensky", window = 20)
+
+dfmat_zelensky_fox <- dfm(zelensky_toks_fox)
+dfmat_zelensky_cnn <- dfm(zelensky_toks_cnn)
+
+tstat_key_zelensky_toks_fox_vs_cnn <- textstat_keyness(rbind(dfmat_zelensky_fox, dfmat_zelensky_cnn),
+                                                   target = seq_len(ndoc(dfmat_zelensky_fox)))
+head(tstat_key_zelensky_toks_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_zelensky_toks_fox_vs_cnn)
+
+#Zelensky
+
+zelensky_toks_fox <- tokens_keep(fox_tokens_no_stopwords, pattern = "Zelensky*", window = 20)
+
+zelensky_toks_cnn <- tokens_keep(cnn_tokens_no_stopwords, pattern = "Zelensky*", window = 20)
+
+dfmat_zelensky_fox <- dfm(zelensky_toks_fox)
+dfmat_zelensky_cnn <- dfm(zelensky_toks_cnn)
+
+tstat_key_zelensky_toks_fox_vs_cnn <- textstat_keyness(rbind(dfmat_zelensky_fox, dfmat_zelensky_cnn),
+                                                    target = seq_len(ndoc(dfmat_zelensky_fox)))
+head(tstat_key_zelensky_toks_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_zelensky_toks_fox_vs_cnn)
+
+kwic(zelensky_toks_fox, "win", 10)
+
+#bigrams
+zelensky_bigrams_fox <- tokens_ngrams(zelensky_toks_fox, n = 2)
+zelensky_bigrams_cnn <- tokens_ngrams(zelensky_toks_cnn, n = 2)
+
+dfmat_zelensky_bigrams_fox <- dfm(zelensky_bigrams_fox)
+dfmat_zelensky_bigrams_cnn <- dfm(zelensky_bigrams_cnn)
+
+tstat_key_zelensky_bigrams_fox_vs_cnn <- textstat_keyness(rbind(dfmat_zelensky_bigrams_fox, dfmat_zelensky_bigrams_cnn),
+                                                      target = seq_len(ndoc(dfmat_zelensky_bigrams_fox)))
+
+head(tstat_key_zelensky_bigrams_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_zelensky_bigrams_fox_vs_cnn)
+
+#Biden
+biden_toks_fox <- tokens_keep(fox_tokens_no_stopwords, pattern = "Biden*", window = 20)
+
+biden_toks_cnn <- tokens_keep(cnn_tokens_no_stopwords, pattern = "Biden*", window = 20)
+
+dfmat_biden_fox <- dfm(biden_toks_fox)
+dfmat_biden_cnn <- dfm(biden_toks_cnn)
+
+tstat_key_biden_toks_fox_vs_cnn <- textstat_keyness(rbind(dfmat_biden_fox, dfmat_biden_cnn),
+                                                       target = seq_len(ndoc(dfmat_biden_fox)))
+head(tstat_key_biden_toks_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_biden_toks_fox_vs_cnn)
+
+#bigrams
+
+biden_bigrams_fox <- tokens_ngrams(biden_toks_fox, n = 2)
+biden_bigrams_cnn <- tokens_ngrams(biden_toks_cnn, n = 2)
+
+dfmat_biden_bigrams_fox <- dfm(biden_bigrams_fox)
+dfmat_biden_bigrams_cnn <- dfm(biden_bigrams_cnn)
+
+tstat_key_biden_bigrams_fox_vs_cnn <- textstat_keyness(rbind(dfmat_biden_bigrams_fox, dfmat_biden_bigrams_cnn),
+                                                          target = seq_len(ndoc(dfmat_biden_bigrams_fox)))
+
+head(tstat_key_biden_bigrams_fox_vs_cnn, 50)
+textplot_keyness(tstat_key_biden_bigrams_fox_vs_cnn)
+
+#WORD CLOUDS
+dfmat_ukraine %>%
+  dfm_group(groups = network) %>%
+  dfm_trim(min_termfreq = 5, verbose = FALSE) %>%
+  textplot_wordcloud(comparison = TRUE)
+
+
+
+#bigrams
+
+
+
+  
+#Tucker Carlson vs others
+
+#Ukraine
+ukraine_toks_tucker <- tokens_keep(tucker_tokens_no_stopwords, pattern = "Ukrain*", window = 20)
+
+ukraine_toks_no_tucker <- tokens_keep(no_tucker_tokens_no_stopwords, pattern = "Ukrain*", window = 20)
+
+dfmat_ukraine_tucker <- dfm(ukraine_toks_tucker)
+dfmat_ukraine_no_tucker <- dfm(ukraine_toks_no_tucker)
+
+tstat_key_ukraine_toks_tucker_vs_all <- textstat_keyness(rbind(dfmat_ukraine_tucker, dfmat_ukraine_no_tucker),
+                                                      target = seq_len(ndoc(dfmat_ukraine_tucker)))
+head(tstat_key_ukraine_toks_tucker_vs_all, 50)
+textplot_keyness(tstat_key_ukraine_toks_tucker_vs_all)
+
+#vs fox
+
+ukraine_toks_fox_no_tucker <- tokens_keep(no_tucker_fox_tokens, pattern = "Ukrain*", window = 20)
+dfmat_ukraine_fox_no_tucker <- dfm(ukraine_toks_fox_no_tucker)
+
+tstat_key_ukraine_toks_tucker_vs_fox <- textstat_keyness(rbind(dfmat_ukraine_tucker, dfmat_ukraine_fox_no_tucker),
+                                                         target = seq_len(ndoc(dfmat_ukraine_tucker)))
+
+head(tstat_key_ukraine_toks_tucker_vs_fox, 50)
+textplot_keyness(tstat_key_ukraine_toks_tucker_vs_fox)
+
+
+
+
+#Zelensky Tucker
+zelensky_toks_tucker <- tokens_keep(tucker_tokens_no_stopwords, pattern = "Zelensky*", window = 20)
+
+zelensky_toks_no_tucker <- tokens_keep(no_tucker_tokens_no_stopwords, pattern = "Zelensky*", window = 20)
+
+zelensky_toks_fox_no_tucker <- tokens_keep(no_tucker_fox_tokens, pattern = "Zelensky*", window = 20)
+
+dfmat_zelensky_tucker <- dfm(zelensky_toks_tucker)
+dfmat_zelensky_no_tucker <- dfm(zelensky_toks_no_tucker)
+dfmat_zelensky_fox_no_tucker <- dfm(zelensky_toks_fox_no_tucker)
+
+tstat_key_zelensky_toks_tucker_vs_all <- textstat_keyness(rbind(dfmat_zelensky_tucker, dfmat_zelensky_no_tucker),
+                                                         target = seq_len(ndoc(dfmat_zelensky_tucker)))
+head(tstat_key_zelensky_toks_tucker_vs_all, 50)
+textplot_keyness(tstat_key_zelensky_toks_tucker_vs_all)
+
+tstat_key_zelensky_toks_tucker_vs_fox <- textstat_keyness(rbind(dfmat_zelensky_tucker, dfmat_zelensky_fox_no_tucker),
+                                                          target = seq_len(ndoc(dfmat_zelensky_tucker)))
+
+textplot_keyness(tstat_key_zelensky_toks_tucker_vs_fox)
+
+tucker_tokens_temp <- tokens(tucker_monologues$monologue)
+
+zelensky_tucker_tokens_temp <- tokens_keep(tucker_tokens_temp, pattern = "Zelensky*", window = 70)
+
+kwic(ukraine_toks_tucker, "democracy", 10)
+
+#NATO Tucker
+
+
+#Ukraine Tucker bigrams
+ukraine_tucker_bigrams <- tokens_ngrams(ukraine_toks_tucker, n = 2)
+ukraine_not_tucker_bigrams <- tokens_ngrams(ukraine_toks_no_tucker, n = 2)
+ukraine_fox_not_tucker_bigrams <- tokens_ngrams(ukraine_toks_fox_no_tucker, n=2)
+
+dfmat_ukraine_tucker_bigrams <- dfm(ukraine_tucker_bigrams)
+dfmat_ukraine_not_tucker_bigrams <- dfm(ukraine_not_tucker_bigrams)
+dfmat_ukraine_fox_not_tucker_bigrams <- dfm(ukraine_fox_not_tucker_bigrams)
+
+tstat_key_ukraine_bigrams_tucker_vs_all <- textstat_keyness(rbind(dfmat_ukraine_tucker_bigrams, dfmat_ukraine_not_tucker_bigrams),
+                                                           target = seq_len(ndoc(dfmat_ukraine_tucker_bigrams)))
+
+tstat_key_ukraine_bigrams_tucker_vs_fox <- textstat_keyness(rbind(dfmat_ukraine_tucker_bigrams, dfmat_ukraine_fox_not_tucker_bigrams),
+                                                            target = seq_len(ndoc(dfmat_ukraine_tucker_bigrams)))
+
+head(tstat_key_ukraine_bigrams_tucker_vs_all, 50)
+textplot_keyness(tstat_key_ukraine_bigrams_tucker_vs_all)
+
+textplot_keyness(tstat_key_ukraine_bigrams_tucker_vs_fox)
+
+#NATO Tucker vs other hosts
+nato_toks_tucker <- tokens_keep(tucker_tokens_no_stopwords, pattern = "NATO", window = 20)
+
+nato_toks_no_tucker <- tokens_keep(no_tucker_tokens_no_stopwords, pattern = "NATO", window = 20)
+
+nato_toks_tucker <- nato_toks_tucker %>%
+  tokens_remove(c("v", "kazianis", "harry", "warner"))
+
+dfmat_nato_tucker <- dfm(nato_toks_tucker)
+dfmat_nato_no_tucker <- dfm(nato_toks_no_tucker)
+
+tstat_key_nato_toks_tucker_vs_all <- textstat_keyness(rbind(dfmat_nato_tucker, dfmat_nato_no_tucker),
+                                                         target = seq_len(ndoc(dfmat_nato_tucker)))
+head(tstat_key_nato_toks_tucker_vs_all, 50)
+textplot_keyness(tstat_key_nato_toks_tucker_vs_all)
+
+#vs fox
+
+nato_toks_fox_no_tucker <- tokens_keep(no_tucker_fox_tokens, pattern = "NATO", window = 20)
+dfmat_nato_fox_no_tucker <- dfm(nato_toks_fox_no_tucker)
+
+tstat_key_nato_toks_tucker_vs_fox <- textstat_keyness(rbind(dfmat_nato_tucker, dfmat_nato_fox_no_tucker),
+                                                         target = seq_len(ndoc(dfmat_nato_tucker)))
+
+head(tstat_key_nato_toks_tucker_vs_fox, 50)
+textplot_keyness(tstat_key_nato_toks_tucker_vs_fox)
+
+#bigrams
+nato_tucker_bigrams <- tokens_ngrams(nato_toks_tucker, n = 2)
+nato_not_tucker_bigrams <- tokens_ngrams(nato_toks_no_tucker, n = 2)
+
+dfmat_nato_tucker_bigrams <- dfm(nato_tucker_bigrams)
+dfmat_nato_not_tucker_bigrams <- dfm(nato_not_tucker_bigrams)
+
+tstat_key_nato_bigrams_tucker_vs_all <- textstat_keyness(rbind(dfmat_nato_tucker_bigrams, dfmat_nato_not_tucker_bigrams),
+                                                            target = seq_len(ndoc(dfmat_nato_tucker_bigrams)))
+
+head(tstat_key_nato_bigrams_tucker_vs_all, 50)
+textplot_keyness(tstat_key_nato_bigrams_tucker_vs_all)
+
+#zelensky Tucker vs other hosts
+zelensky_toks_tucker <- tokens_keep(tucker_tokens_no_stopwords, pattern = "zelensky*", window = 20)
+
+zelensky_toks_no_tucker <- tokens_keep(no_tucker_tokens_no_stopwords, pattern = "zelensky*", window = 20)
+
+zelensky_toks_tucker <- zelensky_toks_tucker %>%
+  tokens_remove(c("v", "kazianis", "harry", "warner"))
+
+dfmat_zelensky_tucker <- dfm(zelensky_toks_tucker)
+dfmat_zelensky_no_tucker <- dfm(zelensky_toks_no_tucker)
+
+tstat_key_zelensky_toks_tucker_vs_all <- textstat_keyness(rbind(dfmat_zelensky_tucker, dfmat_zelensky_no_tucker),
+                                                      target = seq_len(ndoc(dfmat_zelensky_tucker)))
+head(tstat_key_zelensky_toks_tucker_vs_all, 50)
+textplot_keyness(tstat_key_zelensky_toks_tucker_vs_all)
+
+#vs fox
+
+zelensky_toks_fox_no_tucker <- tokens_keep(no_tucker_fox_tokens, pattern = "zelensky*", window = 20)
+dfmat_zelensky_fox_no_tucker <- dfm(zelensky_toks_fox_no_tucker)
+
+tstat_key_zelensky_toks_tucker_vs_fox <- textstat_keyness(rbind(dfmat_zelensky_tucker, dfmat_zelensky_fox_no_tucker),
+                                                      target = seq_len(ndoc(dfmat_zelensky_tucker)))
+
+head(tstat_key_zelensky_toks_tucker_vs_fox, 50)
+textplot_keyness(tstat_key_zelensky_toks_tucker_vs_fox)
+
+#bigrams
+zelensky_tucker_bigrams <- tokens_ngrams(zelensky_toks_tucker, n = 2)
+zelensky_not_tucker_bigrams <- tokens_ngrams(zelensky_toks_no_tucker, n = 2)
+
+dfmat_zelensky_tucker_bigrams <- dfm(zelensky_tucker_bigrams)
+dfmat_zelensky_not_tucker_bigrams <- dfm(zelensky_not_tucker_bigrams)
+
+tstat_key_zelensky_bigrams_tucker_vs_all <- textstat_keyness(rbind(dfmat_zelensky_tucker_bigrams, dfmat_zelensky_not_tucker_bigrams),
+                                                         target = seq_len(ndoc(dfmat_zelensky_tucker_bigrams)))
+
+head(tstat_key_zelensky_bigrams_tucker_vs_all, 50)
+textplot_keyness(tstat_key_zelensky_bigrams_tucker_vs_all)
+
+#biden Tucker vs other hosts
+biden_toks_tucker <- tokens_keep(tucker_tokens_no_stopwords, pattern = "biden*", window = 20)
+
+biden_toks_no_tucker <- tokens_keep(no_tucker_tokens_no_stopwords, pattern = "biden*", window = 20)
+
+biden_toks_tucker <- biden_toks_tucker %>%
+  tokens_remove(c("v", "kazianis", "harry", "warner"))
+
+dfmat_biden_tucker <- dfm(biden_toks_tucker)
+dfmat_biden_no_tucker <- dfm(biden_toks_no_tucker)
+
+tstat_key_biden_toks_tucker_vs_all <- textstat_keyness(rbind(dfmat_biden_tucker, dfmat_biden_no_tucker),
+                                                       target = seq_len(ndoc(dfmat_biden_tucker)))
+head(tstat_key_biden_toks_tucker_vs_all, 50)
+textplot_keyness(tstat_key_biden_toks_tucker_vs_all)
+
+#vs fox
+
+biden_toks_fox_no_tucker <- tokens_keep(no_tucker_fox_tokens, pattern = "biden*", window = 20)
+dfmat_biden_fox_no_tucker <- dfm(biden_toks_fox_no_tucker)
+
+tstat_key_biden_toks_tucker_vs_fox <- textstat_keyness(rbind(dfmat_biden_tucker, dfmat_biden_fox_no_tucker),
+                                                       target = seq_len(ndoc(dfmat_biden_tucker)))
+
+head(tstat_key_biden_toks_tucker_vs_fox, 50)
+textplot_keyness(tstat_key_biden_toks_tucker_vs_fox)
+
+#bigrams
+biden_tucker_bigrams <- tokens_ngrams(biden_toks_tucker, n = 2)
+biden_not_tucker_bigrams <- tokens_ngrams(biden_toks_no_tucker, n = 2)
+
+dfmat_biden_tucker_bigrams <- dfm(biden_tucker_bigrams)
+dfmat_biden_not_tucker_bigrams <- dfm(biden_not_tucker_bigrams)
+
+tstat_key_biden_bigrams_tucker_vs_all <- textstat_keyness(rbind(dfmat_biden_tucker_bigrams, dfmat_biden_not_tucker_bigrams),
+                                                          target = seq_len(ndoc(dfmat_biden_tucker_bigrams)))
+
+head(tstat_key_biden_bigrams_tucker_vs_all, 50)
+textplot_keyness(tstat_key_biden_bigrams_tucker_vs_all)
+
+#all tokens
+dfmat_tucker <- dfm(tucker_tokens_no_stopwords)
+dfmat_no_tucker <- dfm(no_tucker_tokens_no_stopwords)
+
+tstat_key_tucker_vs_all <- textstat_keyness(rbind(dfmat_tucker, dfmat_no_tucker),
+                                            target = seq_len(ndoc(dfmat_tucker)))
+
+textplot_keyness(tstat_key_tucker_vs_all)
+
+#Ukraine sections (bigger)
+
+fox_ukraine_tokens_expanded <- tokens_keep(fox_tokens_no_stopwords, pattern = "Ukrain*", window = 200)
+cnn_ukraine_tokens_expanded <- tokens_keep(cnn_tokens_no_stopwords, pattern = "Ukrain*", window = 200)
+all_ukraine_tokens_expanded <- tokens(monologues$monologue, remove_punct = TRUE, remove_numbers = TRUE) %>%
+  tokens_remove(stopwords("en")) %>%
+  tokens_remove(cableTV_tokens)# %>%
+  #tokens_keep(pattern = "Ukrain*", window = 200)
+
+all_ukraine_tokens_expanded$host <- monologues$host
+all_ukraine_tokens_expanded$network <- monologues$network
+all_ukraine_tokens_expanded$date <- monologues$date
+all_ukraine_tokens_expanded$day <- as.Date(all_ukraine_tokens_expanded$date) -
+  as.Date("2022-02-24")
+
+boring_tokens <- c("now", "go*", "just", "people",
+                   "can", "one", "think", "like", "know", "right",
+                   "city", "said", "get", "well", "say*", "see",
+                   "also", "want", "really", "yes", "thank")
+
+all_ukraine_tokens_expanded <- all_ukraine_tokens_expanded %>%
+  tokens_remove(boring_tokens)
+
+all_ukraine_tokens_expanded$day <- as.integer(all_ukraine_tokens_expanded$day)
+
+dfmat_ukraine_expanded_all <- dfm(all_ukraine_tokens_expanded)
+
+stm_ukraine_expanded_all <- convert(dfmat_ukraine_expanded_all,
+                                    to = "stm",
+                                    docvars = docvars(dfmat_ukraine_expanded_all))
+
+stm_ukraine_expanded_all_results <- stm(documents = stm_ukraine_expanded_all$documents,
+                                        vocab = stm_ukraine_expanded_all$vocab,
+                                        data = stm_ukraine_expanded_all$meta,
+                                        prevalence = ~ network  + s(day) + (network * s(day)),
+                                        K = 30,
+                                        seed = 12345) 
+
+labelTopics(stm_ukraine_expanded_all_results)
+
+plot(stm_ukraine_expanded_all_results, n = 15)
+
+stm_effects_ukraine_all <- estimateEffect(~ network + s(day) + network*s(day),
+                                          stmobj = stm_ukraine_expanded_all_results,
+                                          meta = stm_ukraine_expanded_all$meta,
+                                          uncertainty = "Global")
+
+summary(stm_effects_ukraine_all)
+
+topics_of_interest <- c(2, 5, 6, 9, 18, 20, 21, 23, 29)
+topic_labels <- c(1, "State of the Union", 3, 4, "Russia bombs nuclear reactor",
+                  "Energy production", 7, 8, "Jackson Supreme Court confirmation hearing",
+                  10, 11, 12, 13, 14, 15, 16, 17, "Oscars and Will Smith", 19, "Ukrainian bio labs & Florida 'Don't Say Gay' Bill",
+                  "Ketanji Brown Jackson asked to define 'woman'", 22,
+                  "Russia cut from SWIFT", 24, 25, 26, 27, 28, "Russian oligarchs have assets seized")
+
+topic_labels_2 <- c("State of the Union", "Russia bombs nuclear reactor",
+                    "Energy production", "Jackson Supreme Court confirmation hearing",
+                    "Oscars and Will Smith", "Ukrainian bio labs & Florida 'Don't Say Gay' Bill",
+                    "Ketanji Brown Jackson asked to define 'woman'",
+                    "Russia cut from SWIFT", "Russian oligarchs have assets seized")
+
+
+topics_by_day <- lapply(c("Fox", "CNN"), function(i){
+  extract.estimateEffect(stm_effects_ukraine_all,
+                         covariate = "day",
+                         method = "continuous",
+                         topics = topics_of_interest,
+                         model = stm_ukraine_expanded_all_results,
+                         labeltype = "custom",
+                         custom.labels = topic_labels,
+                         moderator = "network",
+                         moderator.value = i)})
+
+summary(stm_effects_ukraine_all)
+
+topics_by_day <- do.call("rbind", topics_by_day)
+
+View(topics_by_day)
+topics_by_day %>%
+  group_by(label) %>%
+  count()
+
+Plant_bombed <-textGrob("Russian forces\bomb Zaporizhzhia plant", gp=gpar(fontsize=7))
+
+ggplot(topics_by_day, aes(x = covariate.value, y = estimate,
+                          ymin = ci.lower, ymax = ci.upper,
+                          group = moderator.value,
+                          fill = factor(moderator.value))) +
+  facet_wrap(~ label, nrow = 5) +
+  geom_ribbon(alpha = 0.5) +
+  geom_line() +
+  ylim(-0.6, 1) +
+  scale_fill_manual(values = c("cyan2", "brown2"), name = "fill") +
+  xlab("Days after Invasion") +
+  ylab("Expected Topic Proportion") +
+  theme(plot.margin = unit(c(1,1,2,1), "lines")) +
+  geom_vline(xintercept = 7, linetype = "longdash", color = "orange") +
+  geom_vline(xintercept = 6, linetype = "longdash", color = "red") +
+  geom_vline(xintercept = 25, linetype = "longdash", color = "darkgreen") +
+  geom_vline(xintercept = 28, linetype = "longdash", color = "darkblue")
+  #geom_text()
+
+summary(topics_by_day$topic)
+
+
+
+plot(stm_effects_ukraine_all,
+     "day",
+     method = "continuous",
+     topics = topics_of_interest,
+     model = stm_ukraine_expanded_all_results,
+     labeltype = "custom",
+     custom.labels = topic_labels_2,
+     xlab = "Days after Invasion",
+     main = "Topic Prevalence Over Time")
+
+findThoughts(stm_ukraine_expanded_all_results, texts = monologues$monologue,
+             topics = 20, n = 3)
+
+filter(monologues, monologues$monologue %like% "*DeSantis*")
+  
+stm_ukraine_expanded_all_results
+
+plot(stm_effects_ukraine_all,
+     covariate = "network",
+     model = stm_ukraine_expanded_all_results,
+     method = "pointestimate",
+     topics = 20)
+
+# set the x-axis labels as month names
+blog_dates <- seq(from = as.Date("2008-01-01"),
+                  to = as.Date("2008-12-01"),
+                  by = "month")
+axis(1, blog_dates - min(blog_dates), labels = months(blog_dates))
+plot_effect_time <- recordPlot()
+plot.new()25
