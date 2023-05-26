@@ -14,6 +14,8 @@ library(devtools)
 library(tidystm)
 library(grid)
 
+#DATA PREPARATION
+
 foxnewstranscripts_1_ <- read_excel("~/qta final project/foxnewstranscripts (3).xlsx")
 andersoncooper <- read_excel("~/qta final project/andersoncooper.xlsx")
 donlemon <- read_excel("~/qta final project/donlemon.xlsx")
